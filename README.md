@@ -13,7 +13,7 @@ PKG_BUILD_DIR:=$(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)
 PKG_SOURCE_PROTO:=git
 PKG_SOURCE_URL:=https://github.com/dnetlab/traffic-meter.git
 PKG_SOURCE_SUBDIR:=$(PKG_NAME)-$(PKG_VERSION)
-PKG_SOURCE_VERSION:=fcabff3e43bfb11051d1997d32cbf52eab7a6fdf
+PKG_SOURCE_VERSION:=4fa1a59588b56122f23b7e6c5a70789fc768c569
 PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION)-$(PKG_SOURCE_VERSION).tar.gz
 
 include $(INCLUDE_DIR)/package.mk
@@ -52,15 +52,15 @@ endef
 
 define Package/traffic-meter
 	SETCTION := net
-	CATEGORY := SiteView
+	CATEGORY := Dnetlab
 	TITLE	 := traffic meter of all
 	DEPENDS  := +iptables-mod-maccount +iptables-mod-EXTEND_REJECT +shared +ipcalc +ipset +libpthread +libevent2 +libevent2-core +libevent2-extra +libevent2-openssl +libevent2-pthreads +libopenssl
 endef
 
-define Build/Prepare
-	mkdir -p $(PKG_BUILD_DIR)
-	$(CP) ./src/* $(PKG_BUILD_DIR)/
-endef
+# define Build/Prepare
+	# mkdir -p $(PKG_BUILD_DIR)
+	# $(CP) ./src/* $(PKG_BUILD_DIR)/
+# endef
 
 define Build/Compile/maccount-kmod
 	$(MAKE) -C $(LINUX_DIR) \
@@ -127,19 +127,19 @@ define Package/iptables-mod-EXTEND_REJECT/install
 endef
 
 define Package/traffic-meter/install
-	$(CP) -r ./files/etc/ $(1)
+	$(CP) -r $(PKG_BUILD_DIR)/files/etc/ $(1)
 	$(INSTALL_DIR) $(1)/usr/sbin
 	$(INSTALL_BIN) $(PKG_BUILD_DIR)/app/traffic_meter  $(1)/usr/sbin/
 	$(INSTALL_BIN) $(PKG_BUILD_DIR)/app/portal/portal  $(1)/usr/sbin/
 	$(INSTALL_DIR) $(1)/etc/config
-	$(INSTALL_DATA) ./files/traffic_meter.config $(1)/etc/config/traffic
+	$(INSTALL_DATA) $(PKG_BUILD_DIR)/files/traffic_meter.config $(1)/etc/config/traffic
 	$(INSTALL_DIR) $(1)/etc/init.d
-	$(INSTALL_BIN) ./files/traffic_meter.init $(1)/etc/init.d/traffic_init
+	$(INSTALL_BIN) $(PKG_BUILD_DIR)/files/traffic_meter.init $(1)/etc/init.d/traffic_init
 	$(INSTALL_DIR) $(1)/etc/uci-defaults
-	$(INSTALL_DATA) ./files/traffic_meter.defaults $(1)/etc/uci-defaults/99-traffic
+	$(INSTALL_DATA) $(PKG_BUILD_DIR)/files/traffic_meter.defaults $(1)/etc/uci-defaults/99-traffic
 	$(INSTALL_DIR) $(1)/lib/traffic
-	$(INSTALL_BIN) ./files/traffic_meter.script $(1)/lib/traffic/
-	$(INSTALL_DATA) ./files/firewall.include $(1)/lib/traffic/
+	$(INSTALL_BIN) $(PKG_BUILD_DIR)/files/traffic_meter.script $(1)/lib/traffic/
+	$(INSTALL_DATA) $(PKG_BUILD_DIR)/files/firewall.include $(1)/lib/traffic/
 endef
 
 $(eval $(call KernelPackage,ipt-maccount))

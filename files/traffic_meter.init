@@ -1,0 +1,156 @@
+#!/bin/sh /etc/rc.common
+
+START=55
+#USE_PROCD=1
+
+TRAFFIC_TULE_NAME="traffic_meter"
+IPCALC="/usr/sbin/ipcalc"
+
+table_name="lan"
+enabled="" 
+type="" 
+monthly_size="" 
+data_valume="" 
+connect_time_enabled="" 
+connect_time=""
+restart_time=""
+aging_time=0
+show_limit_size=""
+led_enabled="" 
+disconnect_network=""
+
+get_traffic_config(){
+
+	config_load "traffic"
+
+	config_get enabled basic enabled
+	config_get table_name basic table_name
+	config_get type limit type
+	config_get monthly_size limit monthly_size
+	config_get data_valume limit data_valume
+	config_get connect_time_enabled limit connect_time_enabled
+	config_get connect_time limit connect_time
+	
+	config_get restart_time counter restart_time
+	config_get aging_time counter aging_time
+	
+	config_get show_limit_size action show_limit_size
+	config_get led_enabled action led_enabled
+	config_get disconnect_network action disconnect_network
+}
+
+net_mask_to_subnet()
+{
+	eval "$(${IPCALC} -n -p ${1}/${2})"
+	echo "${NETWORK}/${PREFIX}"
+}
+
+add_iptables_rule(){
+	
+	if [ -z "`iptables -L | grep -w "Chain ${TRAFFIC_TULE_NAME}" | grep -v grep`" ]; then
+		iptables -N ${TRAFFIC_TULE_NAME}
+		iptables -I FORWARD -j ${TRAFFIC_TULE_NAME}
+		
+		local ipaddr netmask
+		config_load network
+		config_get ipaddr lan ipaddr
+		config_get netmask lan netmask
+		
+		subnet=`net_mask_to_subnet ${ipaddr} ${netmask}`
+		
+		iptables -A ${TRAFFIC_TULE_NAME} -m account --aaddr ${subnet} --aname ${table_name} -j ACCEPT
+		#echo "iptables -A ${TRAFFIC_TULE_NAME} -m account --aaddr ${subnet} --aname ${table_name} -j ACCEPT"
+	fi
+}
+
+del_iptables_rule(){	
+	if [ -n "`iptables -L | grep -w "Chain ${TRAFFIC_TULE_NAME}" | grep -v grep`" ]; then
+		iptables -F ${TRAFFIC_TULE_NAME}
+		iptables -D FORWARD -j ${TRAFFIC_TULE_NAME}
+		iptables -X ${TRAFFIC_TULE_NAME}
+	fi
+}
+
+start_traffic_meter(){
+	local zero_sec=0;
+	local limit_size=0;
+	local paramter="";
+	
+	get_traffic_config
+	
+	/lib/traffic/traffic_meter.script stop
+	
+	if [ "x${enabled}" != "x1" ]; then
+		exit 0;
+	fi
+	
+	add_iptables_rule
+
+	if [ "x${type}" == "x0" ]; then
+		/usr/sbin/traffic_meter set limit_not ${table_name} 0
+	else
+		limit_size=$(((${monthly_size} - ${show_limit_size}) * 1024 * 1024))
+		#echo "limit_size = ${limit_size}"
+		if [ "x${type}" == "x1" ]; then
+			paramter="-d upload -s $((${monthly_size} - ${show_limit_size}))"
+			/usr/sbin/traffic_meter set limit_src ${table_name} ${limit_size}
+		elif [ "x${type}" == "x2" ]; then			
+			paramter="-d download -s $((${monthly_size} - ${show_limit_size}))"
+			/usr/sbin/traffic_meter set limit_dst ${table_name} ${limit_size}
+		elif [ "x${type}" == "x3" ]; then
+			paramter="-d all -s $((${monthly_size} - ${show_limit_size}))"
+			/usr/sbin/traffic_meter set limit_all ${table_name} ${limit_size}
+		else		
+			/usr/sbin/traffic_meter set limit_not ${table_name} 0
+		fi
+	fi
+
+	[ "x${arging_time}" != "x0" ] && {
+		aging_time=$((${aging_time} * 60))
+		/usr/sbin/traffic_meter set aging_time ${table_name} ${aging_time}
+	}
+
+	[ -n "${restart_time}" ] && {
+        local day=`echo ${restart_time} | cut -d \  -f 1`
+        local time=`echo ${restart_time} | cut -d \  -f 2`
+        local hour=`echo ${time} | cut -d \:  -f 1`
+        local min=`echo ${time} | cut -d \:  -f 2`
+
+        zero_sec=$((${day} * 24 * 3600 + ${hour} * 3600 + ${min} * 60))		
+		paramter=${paramter}" -t ${zero_sec}"
+	}
+	
+	[ -e "/var/run/traffic_meter.pid" ] && {
+		rm /var/run/traffic_meter.pid
+	}
+		
+	[ -z "`ps | grep "traffic_meter" | grep -v grep`" ] && {
+		#echo "start traffic meter"
+		/usr/sbin/traffic_meter -a ${table_name} ${paramter}
+	}
+}
+
+stop_traffic_meter(){	
+	if [ -n "`ps | grep "traffic_meter" | grep -v grep`" ]; then	
+		#echo "stop traffic meter"
+		killall traffic_meter
+	fi
+	del_iptables_rule
+}
+
+boot(){
+	start_traffic_meter
+}
+
+stop(){
+	stop_traffic_meter
+}
+
+start(){
+	start_traffic_meter
+}
+
+restart(){
+	stop_traffic_meter
+	start_traffic_meter
+}
